@@ -1,0 +1,191 @@
+version: '3.8'
+
+services:
+  # Nginx - Web 服务器
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/html:/usr/share/nginx/html
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/logs:/var/log/nginx
+    networks:
+      - monitoring_network
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # Portainer - Docker 可视化管理
+  portainer:
+    image: portainer/portainer
+    container_name: portainer
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - monitoring_network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # Dozzle - 实时 Docker 日志查看器
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    restart: unless-stopped
+    ports:
+      - "8888:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - DOZZLE_LEVEL=info
+      - DOZZLE_TAILSIZE=300
+      - DOZZLE_FILTER=status=running
+      - DOZZLE_NO_ANALYTICS=true
+    networks:
+      - monitoring_network
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # Prometheus - 监控数据收集
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/rules:/etc/prometheus/rules
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - monitoring_network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # Node Exporter - 系统硬件指标导出器
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    privileged: true
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - '--collector.textfile.directory=/textfile_collector'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+      - ./node-exporter/textfile_collector:/textfile_collector:ro
+    networks:
+      - monitoring_network
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # cAdvisor - Docker 容器监控
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg
+    networks:
+      - monitoring_network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # Grafana - 数据可视化平台
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+    networks:
+      - monitoring_network
+    depends_on:
+      - prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # Raspberry Pi Temperature Exporter - 树莓派温度监控
+  rpi-exporter:
+    image: carlosedp/arm_exporter:latest
+    container_name: rpi-exporter
+    restart: unless-stopped
+    ports:
+      - "9243:9243"
+    privileged: true
+    volumes:
+      - /sys:/sys:ro
+      - /etc/hostname:/etc/nodename:ro
+    networks:
+      - monitoring_network
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+networks:
+  monitoring_network:
+    driver: bridge
+
+volumes:
+  portainer_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
