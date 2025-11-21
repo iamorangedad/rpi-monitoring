@@ -14,7 +14,7 @@ A comprehensive monitoring and management solution for Docker environments, feat
 - **Hardware Monitoring** - Raspberry Pi temperature tracking
 
 ### Monitor Center
-![Monitor Center](./assets/nginx.png)
+![Monitor Center](./assets/monitor_center.png)
 ### Grafana Dashboard
 ![Grafana Dashboard](./assets/grafana.png)
 ### Dozzle Dashboard
